@@ -12,21 +12,21 @@ PACKET FORMAT
 - payload: the rest of the bytes
 """
 
-# ! = network byte order, H = 2 bytes, B = 1 byte, I = 4 bytes
+#! = network byte order, H = 2 bytes, B = 1 byte, I = 4 bytes
 HEADER_FORMAT = "!HHBBI"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKET_SIZE = 2048
 MAX_PAYLOAD_SIZE = MAX_PACKET_SIZE - HEADER_SIZE
 DEFAULT_HOP_LIMIT = 16
 
-# message types, anything else is rejected
+#message types, anything else is rejected
 DATA = 1
 ECHO_REQUEST = 2
 ECHO_REPLY = 3
 MSG_TYPES = {DATA, ECHO_REQUEST, ECHO_REPLY}
 
 
-# the only error encode/decode give, so callers only need to catch this one
+#the only error encode/decode give, so callers only need to catch this one
 class PacketError(Exception):
     pass
 
@@ -53,7 +53,7 @@ def encode(packet):
     if packet.msg_type not in MSG_TYPES:
         raise PacketError(f"unknown message type: {packet.msg_type}")
 
-    # struct gives an error if a number doesn't fit its size (ex: src = 70000)
+    #struct gives an error if a number doesn't fit its size (ex: src = 70000)
     try:
         header = struct.pack(HEADER_FORMAT, packet.src, packet.dst, packet.hop_limit, packet.msg_type, packet.msg_id)
     except struct.error as err:
@@ -71,19 +71,19 @@ def decode(data):
     if len(data) > MAX_PACKET_SIZE:
         raise PacketError(f"packet too big: {len(data)} bytes")
 
-    # need at least the full header to read the fields
+    #need at least the full header to read the fields
     if len(data) < HEADER_SIZE:
         raise PacketError(f"packet too short: {len(data)} bytes")
 
-    # read the header fields from the first 10 bytes
+    #read the header fields from the first 10 bytes
     src, dst, hop_limit, msg_type, msg_id = struct.unpack(HEADER_FORMAT, data[:HEADER_SIZE])
 
     if msg_type not in MSG_TYPES:
         raise PacketError(f"unknown message type: {msg_type}")
 
-    # a packet with hop limit 0 should have been dropped already
+    #a packet with hop limit 0 should have been dropped already
     if hop_limit == 0:
         raise PacketError("hop limit is 0")
 
-    # everything after the header is the payload
+    #everything after the header is the payload
     return Packet(src, dst, hop_limit, msg_type, msg_id, data[HEADER_SIZE:])

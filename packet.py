@@ -65,7 +65,7 @@ def encode(packet):
 """
 DECODE
 - Turns the bytes we got back into a Packet
-- Gives a PacketError if the packet is bad (too big, too short, wrong type, hop limit 0)
+- Gives a PacketError if the packet is bad (too big, too short, or wrong type)
 """
 def decode(data):
     if len(data) > MAX_PACKET_SIZE:
@@ -81,9 +81,7 @@ def decode(data):
     if msg_type not in MSG_TYPES:
         raise PacketError(f"unknown message type: {msg_type}")
 
-    #a packet with hop limit 0 should have been dropped already
-    if hop_limit == 0:
-        raise PacketError("hop limit is 0")
+
 
     #everything after the header is the payload
     return Packet(src, dst, hop_limit, msg_type, msg_id, data[HEADER_SIZE:])

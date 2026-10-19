@@ -2,8 +2,18 @@ START THIS PROJECT WITH EITHER:
 - python3 router.py router_name
 - python3 host.py host_name
 
+To send an echo request between hosts, start the destination host and routers
+first, then run a source host with:
+
+```
+python3 host.py H1 --send-to 2 --message "hello H2" --timeout 3
+```
+
+The source prints an explicit `TIMEOUT` if no matching echo reply arrives
+before the timeout. Hosts run in listener mode when `--send-to` is omitted.
+
 RUN THE TESTS WITH:
-- python3 -m unittest test_packet -v
+- python3 -m unittest -v
 
 (run everything from the project folder, because topology.json is opened from the folder you are in)
 
@@ -32,7 +42,11 @@ The header is packed with python's struct module using the format "!HHBBI", wher
 
 We only put the fields the assignment asked for, to keep it simple. We didn't add a length field because UDP already keeps every message separate (one sendto arrives as one recvfrom), so the payload is just everything after the header. The addresses are 2 bytes even though ours only go from 1 to 14, so there is room for more devices later. The msg_id is 4 bytes so we don't run out of ids.
 
-The hop limit starts at 16. The longest path in our network is 4 hops, so 16 is more than enough, and if a packet ever gets stuck in a loop it will still die at some point. Right now routers don't forward packets yet, so the hop limit isn't decreased anywhere yet. That will come with forwarding.
+The hop limit starts at 16. Each router discards a packet with an incoming
+hop limit of 1 or less. Otherwise it decrements the limit by one before
+forwarding. A host is not a router and does not decrement the limit. A zero
+hop limit is decoded as a packet so a router can log it specifically as an
+exhausted-hop-limit drop.
 
 The payload is kept as raw bytes. The network only moves bytes and doesn't care what is inside. Text is turned into bytes (UTF-8) when sending and back into text only when printing, so weird bytes can't break anything.
 
@@ -44,14 +58,38 @@ All of this is in packet.py. encode() turns a Packet into bytes and decode() tur
 2. if it is smaller than 10 bytes it is rejected, because there isn't even a full header
 3. the 5 header fields are read from the first 10 bytes
 4. if msg_type is not 1, 2 or 3 it is rejected
-5. if hop_limit is 0 it is rejected, because it should have been dropped already
-6. everything after the header becomes the payload
+5. everything after the header becomes the payload. Routers apply the
+   hop-limit forwarding rule so the drop is logged with its specific reason.
 
 If any check fails, decode() gives a PacketError with the reason. encode() also refuses to build a bad packet (payload too big, unknown type, or a number that doesn't fit in its field), so we never send a broken packet ourselves. PacketError is the only error they give, so the code that uses them only has to catch one thing.
 
-## What hosts and routers do with packets
+## Static forwarding and hosts
 
-host.py and router.py wait for packets forever. Every packet they get goes through decode(). A good packet is printed as a RECV line, a bad packet is printed as a DROP line with the reason, and the device just keeps going. So a bad packet never crashes a device. For example:
+Each router has a `routes` table in `topology.json`. Keys are destination
+virtual addresses, written as JSON strings, and values are the names of
+neighboring devices to use as next hop. The tables are manually configured;
+there is no shortest-path algorithm or automatic recovery. The initial
+configuration routes from H1 to H2 through RB and routes replies back through
+RB. To use the lower path through RC instead, change these two entries:
+
+```
+RA routes["2"]: "RB" -> "RC"
+RD routes["1"]: "RB" -> "RC"
+```
+
+Restart the devices after changing the tables. Routes at RB and RC are already
+configured to support forwarding in either direction. If the selected link is
+down, packets are lost and the sending host reports a timeout rather than
+waiting forever.
+
+Routers forward payloads unchanged as bytes. They log drops for an exhausted
+hop limit, an unknown destination, or an invalid next hop. Hosts accept packets
+addressed to their own virtual address. An echo-requesting host sends an
+`ECHO_REQUEST`; the addressed host sends back an `ECHO_REPLY` with the same
+message ID and payload.
+
+Every received packet is decoded. A malformed packet is printed as a DROP line
+with the reason, and the device keeps running. For example:
 
 ```
 H1 RECV id=7 type=1 src=2 dst=1 hop=16 payload='hello H1'
@@ -67,31 +105,27 @@ The message id is just a label. It helps match a request with its reply and find
 
 ## Testing it
 
-The unit tests in test_packet.py check that packets come back the same after encode() and decode(), and that every kind of bad packet is rejected.
+The unit tests check packet encoding/decoding and router forwarding behavior.
 
-To test it by hand, start a host in one terminal:
-
-```
-python3 host.py H1
-```
-
-Then send it one good packet and one bad one from a second terminal:
+To test an end-to-end request, start all four routers, then start H2 as a host
+listener:
 
 ```
-python3 -c "
-import socket
-from packet import *
-s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.sendto(encode(Packet(2, 1, 16, DATA, 7, b'hello H1')), ('127.0.0.1', 5001))
-s.sendto(b'garbage', ('127.0.0.1', 5001))
-"
+python3 host.py H2
 ```
 
-H1 should print one RECV line and one DROP line and keep running. Stop it with Ctrl+C.
+In another terminal, start H1 and send an echo request:
+
+```
+python3 host.py H1 --send-to 2 --message "hello H2"
+```
+
+The default route uses RB. Change the two documented route entries and restart
+the routers to test the path through RC. Stop listener processes with Ctrl+C.
 
 ## Files
 - topology.json: all the devices, their vaddr, port and neighbors
 - network.py: loads and checks topology.json, then opens the UDP socket for a device
 - packet.py: the packet format, encode() and decode()
-- host.py / router.py: start a device, decode every packet and print RECV or DROP
-- test_packet.py: tests for packet.py
+- host.py / router.py: run hosts and routers, including echo requests and static forwarding
+- test_packet.py / test_forwarding.py: packet and forwarding tests

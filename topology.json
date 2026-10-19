@@ -1,8 +1,20 @@
 {
   "H1": {"type": "host",   "vaddr": 1,  "port": 5001, "neighbors": ["RA"]},
   "H2": {"type": "host",   "vaddr": 2,  "port": 5002, "neighbors": ["RD"]},
-  "RA": {"type": "router", "vaddr": 11, "port": 5011, "neighbors": ["H1", "RB", "RC"]},
-  "RB": {"type": "router", "vaddr": 12, "port": 5012, "neighbors": ["RA", "RD"]},
-  "RC": {"type": "router", "vaddr": 13, "port": 5013, "neighbors": ["RA", "RD"]},
-  "RD": {"type": "router", "vaddr": 14, "port": 5014, "neighbors": ["RB", "RC", "H2"]}
+  "RA": {
+    "type": "router", "vaddr": 11, "port": 5011, "neighbors": ["H1", "RB", "RC"],
+    "routes": {"1": "H1", "2": "RB"}
+  },
+  "RB": {
+    "type": "router", "vaddr": 12, "port": 5012, "neighbors": ["RA", "RD"],
+    "routes": {"1": "RA", "2": "RD"}
+  },
+  "RC": {
+    "type": "router", "vaddr": 13, "port": 5013, "neighbors": ["RA", "RD"],
+    "routes": {"1": "RA", "2": "RD"}
+  },
+  "RD": {
+    "type": "router", "vaddr": 14, "port": 5014, "neighbors": ["RB", "RC", "H2"],
+    "routes": {"1": "RB", "2": "H2"}
+  }
 }

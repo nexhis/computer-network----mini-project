@@ -49,10 +49,9 @@ class TestDecodeRejects(unittest.TestCase):
         with self.assertRaises(PacketError):
             decode(bytes([0, 1, 0, 2, 16, 9, 0, 0, 0, 1]))
 
-    def test_hop_limit_zero(self):
-        # src=1, dst=2, hop_limit=0, msg_type=DATA, msg_id=1
-        with self.assertRaises(PacketError):
-            decode(bytes([0, 1, 0, 2, 0, DATA, 0, 0, 0, 1]))
+    def test_hop_limit_zero_is_decoded_for_router_drop_logging(self):
+        packet = Packet(1, 2, 0, DATA, 1, b"")
+        self.assertEqual(decode(encode(packet)), packet)
 
 
 class TestEncodeRefuses(unittest.TestCase):

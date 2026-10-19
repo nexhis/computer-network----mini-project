@@ -6,11 +6,13 @@ To send an echo request between hosts, start the destination host and routers
 first, then run a source host with:
 
 ```
-python3 host.py H1 --send-to 2 --message "hello H2" --timeout 3
+python3 host.py H1 --send-to 2 --message "hello H2"
 ```
 
-The source prints an explicit `TIMEOUT` if no matching echo reply arrives
-before the timeout. Hosts run in listener mode when `--send-to` is omitted.
+The source prints `OK` when a matching echo reply (same message id) arrives,
+or an explicit `TIMEOUT` if none arrives within 2 seconds (`RESPONSE_TIMEOUT`
+in host.py). Each probe is sent once and never retransmitted. Hosts run in
+listener mode when `--send-to` is omitted.
 
 RUN THE TESTS WITH:
 - python3 -m unittest -v
@@ -119,6 +121,9 @@ In another terminal, start H1 and send an echo request:
 ```
 python3 host.py H1 --send-to 2 --message "hello H2"
 ```
+
+To send in the other direction, stop H1 and H2, start H1 as a listener with
+`python3 host.py H1`, then run `python3 host.py H2 --send-to 1 --message "hello H1"`.
 
 The default route uses RB. Change the two documented route entries and restart
 the routers to test the path through RC. Stop listener processes with Ctrl+C.

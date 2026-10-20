@@ -14,6 +14,8 @@ from packet import (
     encode,
 )
 
+#how long a host waits for an echo reply before giving up (no retransmission)
+RESPONSE_TIMEOUT = 2.0
 
 def send_to_router(device_name, config, server_socket, packet):
     neighbors = config[device_name]["neighbors"]
@@ -29,7 +31,6 @@ def send_to_router(device_name, config, server_socket, packet):
         print(f"{device_name} DROP id={packet.msg_id}: invalid next hop {next_hop!r}: {err}")
         return False
     return True
-
 
 def handle_packet(device_name, config, server_socket, packet):
     host_address = config[device_name]["vaddr"]
@@ -69,7 +70,7 @@ def receive_packet(device_name, config, server_socket):
     return packet
 
 
-def send_echo(device_name, config, server_socket, destination, message, timeout):
+def send_echo(device_name, config, server_socket, destination, message):
     source = config[device_name]["vaddr"]
     msg_id = time.time_ns() & 0xFFFFFFFF
     request = Packet(
@@ -83,6 +84,7 @@ def send_echo(device_name, config, server_socket, destination, message, timeout)
     if not send_to_router(device_name, config, server_socket, request):
         return
 
+    timeout = RESPONSE_TIMEOUT
     deadline = time.monotonic() + timeout
     while True:
         remaining = deadline - time.monotonic()
@@ -104,6 +106,7 @@ def send_echo(device_name, config, server_socket, destination, message, timeout)
             and packet.msg_type == ECHO_REPLY
             and packet.msg_id == msg_id
         ):
+            print(f"{device_name} OK id={msg_id} matching reply from {destination}")
             return
 
 
@@ -112,11 +115,7 @@ def main():
     parser.add_argument("device_name")
     parser.add_argument("--send-to", type=int, help="send an echo request to this virtual address")
     parser.add_argument("--message", default="ping")
-    parser.add_argument("--timeout", type=float, default=3.0, help="reply timeout in seconds")
     args = parser.parse_args()
-
-    if args.timeout <= 0:
-        parser.error("--timeout must be greater than zero")
 
     device_name, config, server_socket = start(args.device_name, "host")
     if args.send_to is not None:
@@ -129,7 +128,6 @@ def main():
             server_socket,
             args.send_to,
             args.message,
-            args.timeout,
         )
         return
 

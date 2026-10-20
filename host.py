@@ -2,7 +2,8 @@ import argparse
 import socket
 import time
 
-from network import start
+from logger import log_event
+from network import send_over_link, start
 from packet import (
     DEFAULT_HOP_LIMIT,
     ECHO_REPLY,
@@ -11,7 +12,6 @@ from packet import (
     Packet,
     PacketError,
     decode,
-    encode,
 )
 
 #how long a host waits for an echo reply before giving up (no retransmission)
@@ -20,32 +20,28 @@ RESPONSE_TIMEOUT = 2.0
 def send_to_router(device_name, config, server_socket, packet):
     neighbors = config[device_name]["neighbors"]
     if not neighbors or neighbors[0] not in config:
-        print(f"{device_name} DROP id={packet.msg_id}: invalid next hop")
+        log_event(device_name, "DROP", packet, note="invalid next hop")
         return False
 
     next_hop = neighbors[0]
-    address = ("127.0.0.1", config[next_hop]["port"])
+
+    #log SEND first, so a link loss DROP from send_over_link comes after it in the log
+    log_event(device_name, "SEND", packet, next_hop)
     try:
-        server_socket.sendto(encode(packet), address)
+        send_over_link(device_name, config, server_socket, packet, next_hop)
     except OSError as err:
-        print(f"{device_name} DROP id={packet.msg_id}: invalid next hop {next_hop!r}: {err}")
+        log_event(device_name, "DROP", packet, next_hop, note=f"invalid next hop {next_hop!r}: {err}")
         return False
     return True
 
 def handle_packet(device_name, config, server_socket, packet):
     host_address = config[device_name]["vaddr"]
     if packet.dst != host_address:
-        print(
-            f"{device_name} DROP id={packet.msg_id} dst={packet.dst}: "
-            "packet is not addressed to this host"
-        )
+        log_event(device_name, "DROP", packet, note="packet is not addressed to this host")
         return
 
     text = packet.payload.decode(errors="replace")
-    print(
-        f"{device_name} RECV id={packet.msg_id} type={packet.msg_type} "
-        f"src={packet.src} dst={packet.dst} hop={packet.hop_limit} payload='{text}'"
-    )
+    log_event(device_name, "RECV", packet, note=f"payload='{text}'")
 
     if packet.msg_type == ECHO_REQUEST:
         reply = Packet(
@@ -64,7 +60,7 @@ def receive_packet(device_name, config, server_socket):
     try:
         packet = decode(data)
     except PacketError as err:
-        print(f"{device_name} DROP from {address}: {err}")
+        log_event(device_name, "DROP", note=f"{err} from {address}")
         return None
     handle_packet(device_name, config, server_socket, packet)
     return packet
@@ -89,14 +85,14 @@ def send_echo(device_name, config, server_socket, destination, message):
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            print(f"{device_name} TIMEOUT id={msg_id} dst={destination} after {timeout:g}s")
+            log_event(device_name, "TIMEOUT", request, note=f"no reply after {timeout:g}s")
             return
 
         server_socket.settimeout(remaining)
         try:
             packet = receive_packet(device_name, config, server_socket)
         except socket.timeout:
-            print(f"{device_name} TIMEOUT id={msg_id} dst={destination} after {timeout:g}s")
+            log_event(device_name, "TIMEOUT", request, note=f"no reply after {timeout:g}s")
             return
 
         if (
@@ -106,7 +102,7 @@ def send_echo(device_name, config, server_socket, destination, message):
             and packet.msg_type == ECHO_REPLY
             and packet.msg_id == msg_id
         ):
-            print(f"{device_name} OK id={msg_id} matching reply from {destination}")
+            log_event(device_name, "OK", packet, note=f"matching reply from {destination}")
             return
 
 
@@ -115,9 +111,10 @@ def main():
     parser.add_argument("device_name")
     parser.add_argument("--send-to", type=int, help="send an echo request to this virtual address")
     parser.add_argument("--message", default="ping")
+    parser.add_argument("--run", default="run", help="run name, logs go to logs/<run>/")
     args = parser.parse_args()
 
-    device_name, config, server_socket = start(args.device_name, "host")
+    device_name, config, server_socket = start(args.device_name, "host", args.run)
     if args.send_to is not None:
         known_addresses = {info["vaddr"] for info in config.values()}
         if args.send_to not in known_addresses:

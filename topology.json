@@ -3,11 +3,13 @@
   "H2": {"type": "host",   "vaddr": 2,  "port": 5002, "neighbors": ["RD"]},
   "RA": {
     "type": "router", "vaddr": 11, "port": 5011, "neighbors": ["H1", "RB", "RC"],
-    "routes": {"1": "H1", "2": "RB"}
+    "routes": {"1": "H1", "2": "RB"},
+    "link_conditions": {"RB": {"loss": 0.0, "delay": 0.0, "seed": 1}}
   },
   "RB": {
     "type": "router", "vaddr": 12, "port": 5012, "neighbors": ["RA", "RD"],
-    "routes": {"1": "RA", "2": "RD"}
+    "routes": {"1": "RA", "2": "RD"},
+    "link_conditions": {"RA": {"loss": 0.0, "delay": 0.0, "seed": 2}}
   },
   "RC": {
     "type": "router", "vaddr": 13, "port": 5013, "neighbors": ["RA", "RD"],

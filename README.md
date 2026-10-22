@@ -94,9 +94,9 @@ Every received packet is decoded. A malformed packet is printed as a DROP line
 with the reason, and the device keeps running. For example:
 
 ```
-H1 RECV id=7 type=1 src=2 dst=1 hop=16 payload='hello H1'
-H1 DROP from ('127.0.0.1', 54974): packet too short: 7 bytes
-H1 DROP from ('127.0.0.1', 54974): packet too big: 2049 bytes
+run=run time=2026-10-20T12:00:01.120 device=H1 event=RECV id=7 type=DATA src=2 dst=1 hop=16 note=payload='hello H1'
+run=run time=2026-10-20T12:00:02.310 device=H1 event=DROP note=packet too short: 7 bytes from ('127.0.0.1', 54974)
+run=run time=2026-10-20T12:00:03.450 device=H1 event=DROP note=packet too big: 2049 bytes from ('127.0.0.1', 54974)
 ```
 
 One tricky part was catching packets that are too big. If we ask the socket for 2048 bytes and someone sends 3000, the operating system silently cuts it to 2048 and we would never know. So we ask for 2049 bytes. If we really get 2049, we know the packet was too big and we drop it.
@@ -128,9 +128,63 @@ To send in the other direction, stop H1 and H2, start H1 as a listener with
 The default route uses RB. Change the two documented route entries and restart
 the routers to test the path through RC. Stop listener processes with Ctrl+C.
 
+## Network conditions and logs
+
+### Packet loss and delay on a link
+
+A link can be made to lose packets and/or add delay. This is set in topology.json, inside the device that **sends** on the link, under `link_conditions`. The key is the neighbor at the other end, so this on RA means the directed link RA -> RB:
+
+```
+"RA": { ..., "link_conditions": {"RB": {"loss": 0.5, "delay": 0.2, "seed": 1}} }
+```
+
+- `loss`: chance from 0.0 to 1.0 that a packet on this link is dropped
+- `delay`: extra seconds before the packet is delivered
+- `seed`: seed for this link's random generator, so the same seed gives the same drops
+
+To affect both directions (a bidirectional link pair), add the mirror entry on the other device too (`"RA": {...}` inside RB). topology.json already has the RA <-> RB pair set to 0 loss and 0 delay, so by default nothing changes. Change the numbers and restart the devices to use them.
+
+All sending (by hosts and by routers) goes through one function, `send_over_link()` in network.py, so the conditions hit every packet type the same way: requests, replies and data. A lost packet is logged as a DROP with `note=link loss RA->RB`. A delayed packet is handed to a timer (`threading.Timer`) that sends it later, so the device does not wait and keeps handling other packets in the meantime.
+
+At startup every device logs one CONDITION line per link it has conditions on, so the logs of a run always say where the conditions were and which seed was used:
+
+```
+run=demo1 time=2026-10-20T12:02:25.887 device=RA event=CONDITION next_hop=RB note=link=RA->RB loss=0.5 delay=0.2 seed=1
+run=demo1 time=2026-10-20T12:02:25.887 device=RB event=CONDITION next_hop=RA note=link=RB->RA loss=0.0 delay=0.0 seed=2
+```
+
+A link failure can be simulated with `"loss": 1.0`: no packet gets through, and the host that sent the probe reports a TIMEOUT.
+
+### Logs
+
+Every device logs one line per event, with this information:
+
+- `run`: the run name, given with `--run` (default `run`)
+- `time`: date and time with milliseconds
+- `device`: who wrote the line
+- `event`: SEND, RECV, FWD, DROP, TIMEOUT, OK or CONDITION
+- `id`, `type`, `src`, `dst`, `hop`: the packet's message id, message type, virtual source, virtual destination and hop limit
+- `next_hop`: where the packet was sent (on SEND, FWD and link DROP lines)
+- `note`: the reason for a DROP, the payload on a RECV, etc.
+
+The lines are printed and also saved to `logs/<run>/<device>.log`. Give every device the same run name:
+
+```
+python3 router.py RA --run demo1     (same for RB, RC, RD)
+python3 host.py H2 --run demo1
+python3 host.py H1 --send-to 2 --message "hello H2" --run demo1
+```
+
+To follow one request and its reply through every device, search all the log files of the run for its message id:
+
+```
+grep -h "id=<message id> " logs/demo1/*.log | sort -s -k2,2
+```
+
 ## Files
-- topology.json: all the devices, their vaddr, port and neighbors
-- network.py: loads and checks topology.json, then opens the UDP socket for a device
+- topology.json: all the devices, their vaddr, port, neighbors, routes and link conditions
+- network.py: loads and checks topology.json, opens the UDP socket for a device, and sends packets over a link (loss and delay)
+- logger.py: writes the log lines (stdout and logs/<run>/<device>.log)
 - packet.py: the packet format, encode() and decode()
 - host.py / router.py: run hosts and routers, including echo requests and static forwarding
-- test_packet.py / test_forwarding.py: packet and forwarding tests
+- test_packet.py / test_forwarding.py / test_network.py: packet, forwarding and link condition tests

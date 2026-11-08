@@ -1,10 +1,10 @@
 import os
 from datetime import datetime
 
-from packet import DATA, ECHO_REPLY, ECHO_REQUEST
+from packet import ACK, DATA, ECHO_REPLY, ECHO_REQUEST
 
 #names to print instead of the type numbers
-TYPE_NAMES = {DATA: "DATA", ECHO_REQUEST: "ECHO_REQUEST", ECHO_REPLY: "ECHO_REPLY"}
+TYPE_NAMES = {DATA: "DATA", ECHO_REQUEST: "ECHO_REQUEST", ECHO_REPLY: "ECHO_REPLY", ACK: "ACK"}
 
 #name of the current run, None = only print (ex: in the unit tests)
 run_name = None

@@ -69,5 +69,17 @@ class TestEncodeRefuses(unittest.TestCase):
             encode(Packet(1, 2, DEFAULT_HOP_LIMIT, 9, 1, b""))
 
 
+class TestRunIdAndSeq(unittest.TestCase):
+
+    def test_make_and_split(self):
+        self.assertEqual(split_id(make_id(5, 3)), (5, 3))
+
+    def test_biggest_values_fit(self):
+        msg_id = make_id(65535, 65535)
+        self.assertEqual(split_id(msg_id), (65535, 65535))
+        #still fits the 4 byte msg_id field
+        encode(Packet(1, 2, DEFAULT_HOP_LIMIT, ACK, msg_id, b""))
+
+
 if __name__ == "__main__":
     unittest.main()

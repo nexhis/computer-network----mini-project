@@ -7,7 +7,7 @@ PACKET FORMAT
 - src (2 bytes): who sent it
 - dst (2 bytes): who it's for
 - hop_limit (1 byte): goes down by 1 at each router, dropped at 0
-- msg_type (1 byte): DATA, ECHO_REQUEST or ECHO_REPLY
+- msg_type (1 byte): DATA, ECHO_REQUEST, ECHO_REPLY or ACK
 - msg_id (4 bytes): id of the message, a reply uses the same id
 - payload: the rest of the bytes
 """
@@ -39,12 +39,44 @@ MAKE ID / SPLIT ID (for reliable transfer)
 - An ACK uses the same msg_id as the DATA it acknowledges
 """
 def make_id(run_id, seq):
+    #a value over 65535 would spill into the other half of the id, so refuse it
+    for name, value in (("run_id", run_id), ("seq", seq)):
+        if not 0 <= value <= 0xFFFF:
+            raise PacketError(f"{name} out of range: {value}")
     return (run_id << 16) | seq
 
 
 def split_id(msg_id):
     #returns (run_id, seq)
     return msg_id >> 16, msg_id & 0xFFFF
+
+
+"""
+MAKE PAYLOAD / SPLIT PAYLOAD (for reliable transfer)
+- A reliable DATA payload starts with a small text prefix "<seq>/<total>|"
+  followed by the message bytes (ex: b"3/10|msg 3")
+- total lets the receiver know which message is the last one (seq == total)
+  so it can stay available for a bounded time afterwards
+- The header stays the same 10 bytes, an ACK has an empty payload
+- split_payload gives a PacketError if the prefix is missing or broken
+"""
+def make_payload(seq, total, body):
+    return f"{seq}/{total}|".encode() + body
+
+
+def split_payload(payload):
+    #returns (seq, total, body)
+    prefix, sep, body = payload.partition(b"|")
+    if not sep:
+        raise PacketError("reliable payload has no seq/total prefix")
+    try:
+        seq_text, total_text = prefix.decode("ascii").split("/")
+        seq, total = int(seq_text), int(total_text)
+    except (UnicodeDecodeError, ValueError):
+        raise PacketError(f"bad seq/total prefix: {prefix!r}")
+    if not 1 <= seq <= total:
+        raise PacketError(f"seq {seq} not in 1..{total}")
+    return seq, total, body
 
 
 @dataclass

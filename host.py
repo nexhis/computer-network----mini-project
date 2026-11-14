@@ -106,19 +106,58 @@ def send_echo(device_name, config, server_socket, destination, message):
             return
 
 
+"""
+RUN TRANSFER
+- Runs one reliable (stop-and-wait) transfer from the command line options
+- Logs a SUMMARY line at the end and exits with code 1 if the transfer FAILED
+- reliable.py is imported here and not at the top, because reliable.py imports from host.py
+"""
+def run_transfer(device_name, config, server_socket, args):
+    import reliable
+
+    messages = reliable.generate_messages(args.count)
+    run_id = args.run_id if args.run_id is not None else reliable.make_run_id()
+
+    stats = reliable.send_reliable(
+        device_name, config, server_socket, args.send_to, messages, run_id,
+        timeout=args.timeout, max_retries=args.max_retries,
+    )
+
+    log_event(device_name, "SUMMARY", note=reliable.summary_line(stats))
+    if stats["status"] == "FAILED":
+        raise SystemExit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run a mini-internet host.")
     parser.add_argument("device_name")
     parser.add_argument("--send-to", type=int, help="send an echo request to this virtual address")
     parser.add_argument("--message", default="ping")
     parser.add_argument("--run", default="run", help="run name, logs go to logs/<run>/")
+
+    #reliable transfer (Track B), with --send-to this replaces the echo probe
+    parser.add_argument("--reliable", action="store_true", help="send --count messages with stop-and-wait")
+    parser.add_argument("--count", type=int, default=10, help="how many generated messages to send")
+    parser.add_argument("--timeout", type=float, default=1.0, help="seconds to wait for an ACK")
+    parser.add_argument("--max-retries", type=int, default=5, help="retransmissions per message before failing")
+    parser.add_argument("--run-id", type=int, help="16 bit run id (default: taken from the clock)")
     args = parser.parse_args()
+
+    if not 1 <= args.count <= 65535:
+        parser.error("--count must be 1..65535")
+    if args.run_id is not None and not 0 <= args.run_id <= 65535:
+        parser.error("--run-id must be 0..65535")
 
     device_name, config, server_socket = start(args.device_name, "host", args.run)
     if args.send_to is not None:
         known_addresses = {info["vaddr"] for info in config.values()}
         if args.send_to not in known_addresses:
             parser.error(f"unknown destination virtual address: {args.send_to}")
+
+        if args.reliable:
+            run_transfer(device_name, config, server_socket, args)
+            return
+
         send_echo(
             device_name,
             config,

@@ -80,6 +80,28 @@ class TestRunIdAndSeq(unittest.TestCase):
         #still fits the 4 byte msg_id field
         encode(Packet(1, 2, DEFAULT_HOP_LIMIT, ACK, msg_id, b""))
 
+    def test_out_of_range_is_refused(self):
+        with self.assertRaises(PacketError):
+            make_id(65536, 1)
+        with self.assertRaises(PacketError):
+            make_id(1, -1)
+
+
+class TestSeqTotalPayload(unittest.TestCase):
+
+    def test_make_and_split(self):
+        payload = make_payload(3, 10, b"msg 3")
+        self.assertEqual(payload, b"3/10|msg 3")
+        self.assertEqual(split_payload(payload), (3, 10, b"msg 3"))
+
+    def test_body_may_contain_bar(self):
+        self.assertEqual(split_payload(make_payload(1, 1, b"a|b")), (1, 1, b"a|b"))
+
+    def test_bad_prefix_is_refused(self):
+        for payload in (b"no prefix", b"x/2|hi", b"3|hi", b"0/2|hi", b"5/4|hi"):
+            with self.assertRaises(PacketError):
+                split_payload(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

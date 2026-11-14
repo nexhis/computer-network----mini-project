@@ -23,12 +23,28 @@ DEFAULT_HOP_LIMIT = 16
 DATA = 1
 ECHO_REQUEST = 2
 ECHO_REPLY = 3
-MSG_TYPES = {DATA, ECHO_REQUEST, ECHO_REPLY}
+ACK = 4
+MSG_TYPES = {DATA, ECHO_REQUEST, ECHO_REPLY, ACK}
 
 
 #the only error encode/decode give, so callers only need to catch this one
 class PacketError(Exception):
     pass
+
+
+"""
+MAKE ID / SPLIT ID (for reliable transfer)
+- msg_id is 4 bytes: first 2 bytes = run id, last 2 bytes = sequence number
+- run_id and seq must be 0..65535
+- An ACK uses the same msg_id as the DATA it acknowledges
+"""
+def make_id(run_id, seq):
+    return (run_id << 16) | seq
+
+
+def split_id(msg_id):
+    #returns (run_id, seq)
+    return msg_id >> 16, msg_id & 0xFFFF
 
 
 @dataclass

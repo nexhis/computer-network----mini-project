@@ -1,2 +1,5 @@
 #log files made by running the devices (logs/<run>/<device>.log)
 logs/
+
+#python bytecode
+__pycache__/

@@ -25,6 +25,7 @@ def set_run(run):
 LOG EVENT
 - Builds one log line (run, time, device, event, and the packet fields if there is a packet)
 - event is SEND, RECV, FWD, DROP, TIMEOUT, OK or CONDITION
+- reliable transfer also uses RETX, IGNORE, FAIL, DONE and SUMMARY
 - Prints the line and also adds it to logs/<run>/<device>.log
 """
 def log_event(device, event, packet=None, next_hop=None, note=""):

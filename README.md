@@ -12,6 +12,21 @@ python3 host.py H1 --send-to 2 --message "hello H2" --timeout 3
 The source prints an explicit `TIMEOUT` if no matching echo reply arrives
 before the timeout. Hosts run in listener mode when `--send-to` is omitted.
 
+Repeated echo requests can collect comparison measurements:
+
+```
+python3 host.py H1 --send-to 2 --message "RB test" --count 10 --interval 0.1 --route-label RB --timeout 3
+python3 host.py H2 --send-to 1 --message "RB test" --count 10 --interval 0.1 --route-label RB --timeout 3
+```
+
+Run the same two commands after changing the routes to RC. Use a separate
+listener process for the receiving host if it is not already running:
+
+```
+python3 host.py H2
+python3 host.py H1
+```
+
 RUN THE TESTS WITH:
 - python3 -m unittest -v
 
@@ -122,6 +137,22 @@ python3 host.py H1 --send-to 2 --message "hello H2"
 
 The default route uses RB. Change the two documented route entries and restart
 the routers to test the path through RC. Stop listener processes with Ctrl+C.
+
+## Route comparison
+
+For a bidirectional comparison, run repeated echo requests in both directions:
+
+1. Configure RA and RD for the RB path.
+2. Start all routers and keep H1 and H2 listening.
+3. Run sender mode from H1 to H2 and from H2 to H1 with `--count`.
+4. Restart the routers after configuring the RC path.
+5. Repeat the two sender commands with `--route-label RC`.
+
+Each sender prints a `SUMMARY` line containing sent, received, lost, success
+percentage, loss percentage, and minimum/average/maximum RTT. A reply also
+reports whether it returned the original payload unchanged. The receiver
+prints `RECV` for each echo request and request direction, so both the sender
+and receiver behavior are visible in the logs.
 
 ## Files
 - topology.json: all the devices, their vaddr, port and neighbors
